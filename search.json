@@ -1,16 +1,16 @@
 [
   {
-    "objectID": "index.html",
-    "href": "index.html",
-    "title": "health_dashboard",
-    "section": "",
-    "text": "Short demo website about a county health dashboard with respect to aging populations.\n\n1 + 4\n\n[1] 5"
-  },
-  {
     "objectID": "about.html",
     "href": "about.html",
     "title": "About",
     "section": "",
     "text": "About this site\n\n1 + 1\n\n[1] 2"
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "health_dashboard",
+    "section": "",
+    "text": "Short demo website about a county health dashboard with respect to aging populations.\n\n1 + 4\n\n[1] 5"
   }
 ]
