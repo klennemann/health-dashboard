@@ -3,12 +3,10 @@ project:
   output-dir: .
 
 website:
-  title: "health_dashboard"
   navbar:
     left:
       - href: index.qmd
         text: Home
-      - about.qmd
 
 format:
   html:

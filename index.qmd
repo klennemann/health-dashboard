@@ -1,11 +1,303 @@
 ---
-title: "health_dashboard"
+title: "Health Dashboard"
 ---
 
-Short demo website about a county health dashboard with respect to aging populations.
 
 
-```{r}
-1 + 4
+Helpful census statistics that relate to healthcare planning for aging populations. 
+
+```{=html}
+<div style="max-width: 800px; margin: 0 auto; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <!-- Input Section -->
+  <div style="background: #f8f9fa; padding: 25px; border-radius: 8px; margin-bottom: 20px;">
+    <h3 style="margin-top: 0; color: #2c3e50;">📍 County Lookup</h3>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <input 
+        type="text" 
+        id="fipsInput" 
+        placeholder="Enter 5-digit FIPS code (e.g., 36047 for Brooklyn, NY)" 
+        pattern="[0-9]{5}"
+        maxlength="5"
+        style="flex: 1; padding: 12px; border: 2px solid #e9ecef; border-radius: 6px; font-size: 16px;"
+      >
+      <button 
+        onclick="fetchEducationData()"
+        style="padding: 12px 24px; background: #2c3e50; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: 500;"
+        onmouseover="this.style.background='#34495e'"
+        onmouseout="this.style.background='#2c3e50'"
+      >
+        Get Data
+      </button>
+    </div>
+    <p style="margin: 10px 0 0 0; color: #6c757d; font-size: 14px;">
+      Find your county's FIPS code 
+      <a href="https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt" target="_blank" style="color: #2c3e50;">
+        here
+      </a>
+    </p>
+  </div>
+
+  <!-- Results Section -->
+  <div id="educationResults"></div>
+</div>
+
+<script>
+// ============================================
+// CONFIGURATION - YOUR CENSUS API KEY
+// ============================================
+const CENSUS_API_KEY = "ca498e47dd979497527c282db002163c55cecedc";
+
+// ============================================
+// EDUCATION DATA FETCHER - SIMPLIFIED FOR 2 METRICS
+// ============================================
+async function fetchEducationData() {
+  const fips = document.getElementById('fipsInput').value.trim();
+  const resultsDiv = document.getElementById('educationResults');
+  
+  // Validate input
+  if (!fips) {
+    showError('Please enter a FIPS code');
+    return;
+  }
+  
+  if (!/^\d{5}$/.test(fips)) {
+    showError('FIPS code must be exactly 5 digits');
+    return;
+  }
+  
+  // Show loading state
+  resultsDiv.innerHTML = `
+    <div style="text-align: center; padding: 40px; background: white; border-radius: 8px; border: 1px solid #e9ecef;">
+      <div style="display: inline-block; width: 30px; height: 30px; border: 3px solid #f3f3f3; border-top: 3px solid #2c3e50; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+      <p style="margin: 10px 0 0 0; color: #6c757d;">Fetching county data...</p>
+    </div>
+  `;
+  
+  // Parse FIPS code
+  const stateFips = fips.substring(0, 2);
+  const countyFips = fips.substring(2, 5);
+  
+  // ============================================
+  // UPDATED URL: 4 METRICS
+  // ============================================
+  const url = `https://api.census.gov/data/2022/acs/acs5?` +
+    `get=NAME,` +                      // County name
+    `B01003_001E,` +                   // [1] Total population (all ages)
+    `B15002_011E,B15002_028E,` +       // [2-3] Bachelor's degree (male/female)
+    `B15002_015E,B15002_032E,` +       // [4-5] Master's degree (male/female)
+    `B15002_016E,B15002_033E,` +       // [6-7] Professional degree (male/female)
+    `B15002_017E,B15002_034E,` +       // [8-9] Doctorate degree (male/female)
+    `B27010_001E,` +                   // [10] Total civilian noninstitutionalized population (DENOMINATOR for uninsured %)
+    `B27010_017E,B27010_033E,` +       // [11-12] Uninsured male + uninsured female
+    `B19013_001E` +                    // [13] Median household income
+    `&for=county:${countyFips}&in=state:${stateFips}&key=${CENSUS_API_KEY}`;
+  
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.length < 2) {
+      showError('County not found. Please check the FIPS code.');
+      return;
+    }
+    
+    // Fetch physician data from your local JSON file
+    const physicianData = await fetchPhysicianData(fips);
+    
+    // ============================================
+    // PARSE ALL 14 FIELDS (indices 0-13)
+    // ============================================
+    const row = data[1];
+    const countyName = row[0];
+    
+    // METRIC 1: Total population (all ages)
+    const totalPopulation = parseInt(row[1]);
+    
+    // METRIC 2: Bachelor's degree or higher
+    const bachelors = parseInt(row[2]) + parseInt(row[3]);
+    const masters = parseInt(row[4]) + parseInt(row[5]);
+    const professional = parseInt(row[6]) + parseInt(row[7]);
+    const doctorate = parseInt(row[8]) + parseInt(row[9]);
+    const bachelorsPlus = bachelors + masters + professional + doctorate;
+    const pctBachelorsPlus = (bachelorsPlus / totalPopulation * 100).toFixed(1);
+    
+    // METRIC 3: Percentage without health insurance
+    const totalCivPop = parseInt(row[10]);          // B27010_001E - Civilian noninstitutionalized population
+    const uninsuredMale = parseInt(row[11]);        // B27010_017E
+    const uninsuredFemale = parseInt(row[12]);      // B27010_033E
+    const totalUninsured = uninsuredMale + uninsuredFemale;
+    
+    // STANDARD METHODOLOGY: Uninsured rate of civilian noninstitutionalized population
+    const pctUninsured = (totalUninsured / totalCivPop * 100).toFixed(1);
+    
+    // ALTERNATIVE (if you MUST use total population - uncomment below):
+    // const pctUninsuredOfTotal = (totalUninsured / totalPopulation * 100).toFixed(1);
+    // LABEL ACCORDINGLY: "Uninsured (% of total pop - includes ineligible groups)"
+    
+    // METRIC 4: Median household income
+    const medianIncome = parseInt(row[13]);         // B19013_001E [citation:2][citation:5]
+    const formattedIncome = medianIncome.toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    });
+    
+    // ============================================
+    // DISPLAY - 6 METRIC CARDS
+    // ============================================
+    resultsDiv.innerHTML = `
+      <div style="background: white; border-radius: 8px; border: 1px solid #e9ecef; overflow: hidden;">
+        <!-- Header -->
+        <div style="background: #2c3e50; color: white; padding: 20px;">
+          <h3 style="margin: 0; font-size: 20px;">${countyName}</h3>
+          <p style="margin: 5px 0 0 0; opacity: 0.9;">FIPS: ${fips}</p>
+        </div>
+        
+        <!-- Six Metrics Grid -->
+        <div style="padding: 30px;">
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+            
+            <!-- Card 1: Total Population -->
+            <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+              <div style="font-size: 14px; color: #6c757d; margin-bottom: 8px;">Total Population</div>
+              <div style="font-size: 32px; font-weight: 600; color: #2c3e50;">${totalPopulation.toLocaleString()}</div>
+            </div>
+            
+            <!-- Card 2: Bachelor's Degree or Higher -->
+            <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+              <div style="font-size: 14px; color: #6c757d; margin-bottom: 8px;">Bachelor's Degree or Higher</div>
+              <div style="font-size: 32px; font-weight: 600; color: #2c3e50;">${pctBachelorsPlus}%</div>
+              <div style="font-size: 13px; color: #6c757d; margin-top: 5px;">${bachelorsPlus.toLocaleString()} people</div>
+            </div>
+            
+            <!-- Card 3: Uninsured Rate -->
+            <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+              <div style="font-size: 14px; color: #6c757d; margin-bottom: 8px;">Without Health Insurance</div>
+              <div style="font-size: 32px; font-weight: 600; color: #2c3e50;">${pctUninsured}%</div>
+              <div style="font-size: 13px; color: #6c757d; margin-top: 5px;">
+                ${totalUninsured.toLocaleString()} uninsured
+                <span style="display: block; font-size: 11px; font-style: italic; margin-top: 3px;">
+                  of civilian population
+                </span>
+              </div>
+            </div>
+            
+            <!-- Card 4: Median Household Income -->
+            <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+              <div style="font-size: 14px; color: #6c757d; margin-bottom: 8px;">Median Household Income</div>
+              <div style="font-size: 32px; font-weight: 600; color: #2c3e50;">${formattedIncome}</div>
+            </div>
+            
+            <!-- Card 5: Primary Care Physicians Ratio -->
+    ${physicianData ? `
+    <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+      <div style="font-size: 14px; color: #6c757d; margin-bottom: 8px;">Primary Care Access</div>
+      <div style="font-size: 32px; font-weight: 600; color: #2c3e50;">${physicianData.pcpPer100k}</div>
+      <div style="font-size: 13px; color: #6c757d; margin-top: 5px;">
+        physicians per 100,000 population
+      </div>
+      <div style="font-size: 12px; color: #6c757d; margin-top: 3px;">
+        (${physicianData.pcpCount} total physicians)
+      </div>
+    </div>
+    ` : `
+    <div style="padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+      <div style="font-size: 14px; color: #6c757d; margin-bottom: 8px;">Primary Care Access</div>
+      <div style="font-size: 20px; font-weight: 600; color: #6c757d;">No data</div>
+    </div>
+    `}
+    
+    <!-- Card 6: HPSA Designation -->
+${physicianData ? `
+<div style="padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+  <div style="font-size: 14px; color: #6c757d; margin-bottom: 8px;">HPSA Designation</div>
+  <div style="font-size: 28px; font-weight: 600; color: ${physicianData.hpsaCode === 1 ? '#c0392b' : physicianData.hpsaCode === 2 ? '#e67e22' : '#2c3e50'};">
+    ${physicianData.hpsaCode === 1 ? 'Whole county shortage' : 
+      physicianData.hpsaCode === 2 ? 'Partial county shortage' : 
+      'No county-level designation'}
+  </div>
+  <div style="font-size: 12px; color: #6c757d; margin-top: 5px;">
+    Primary care physician shortage
+  </div>
+</div>
+` : `
+<div style="padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+  <div style="font-size: 14px; color: #6c757d; margin-bottom: 8px;">HPSA Designation</div>
+  <div style="font-size: 18px; font-weight: 600; color: #6c757d;">No data available</div>
+  <div style="font-size: 12px; color: #6c757d; margin-top: 5px;">
+    Primary care physician shortage
+  </div>
+</div>
+`}
+            
+          </div>
+        </div>
+        
+        <!-- Source note -->
+<div style="padding: 15px 20px; background: #f8f9fa; border-top: 1px solid #e9ecef;">
+  <p style="margin: 0; color: #6c757d; font-size: 12px; text-align: right;">
+    Source: ACS 5-Year Estimates (2018-2022) • AHRF 2025<br>
+    <span style="margin": italic;">Primary care physicians: Non-federal, patient care, excl. residents</span>
+  </p>
+</div>
+
+      </div>
+    `;
+    
+  } catch (error) {
+    showError('Error fetching data. Please try again.');
+    console.error(error);
+  }
+}
+
+// Helper function to show errors
+function showError(message) {
+  document.getElementById('educationResults').innerHTML = `
+    <div style="background: #fff3f3; border: 1px solid #ffcdd2; border-radius: 8px; padding: 20px; color: #d32f2f;">
+      <p style="margin: 0; font-weight: 500;">❌ ${message}</p>
+    </div>
+  `;
+}
+
+// Function to display physician data
+async function fetchPhysicianData(fipsCode) {
+  try {
+    const response = await fetch('county_physician_counts.json');
+    const allCounties = await response.json();
+    
+    // Find the county by 5-digit FIPS
+    const countyData = allCounties.find(c => c.fips_st_cnty == fipsCode);
+    
+    if (!countyData) return null;
+    
+    // Format HPSA code into readable text
+    let hpsaStatus = 'Not designated';
+    if (countyData.hpsa_prim_care_25 === 1) hpsaStatus = 'Whole county HPSA';
+    else if (countyData.hpsa_prim_care_25 === 2) hpsaStatus = 'Partial county HPSA';
+    
+    return {
+      pcpCount: countyData.phys_nf_prim_care_pc_exc_rsdt_23,
+      population: countyData.popn_23,
+      pcpPer100k: countyData.pcp_per_100k || 0,
+      hpsaCode: countyData.hpsa_prim_care_25,
+      hpsaStatus: hpsaStatus
+    };
+    
+  } catch (error) {
+    console.error('Error loading physician data:', error);
+    return null;
+  }
+}
+
+// Add loading animation
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
+</script>
 ```
-
