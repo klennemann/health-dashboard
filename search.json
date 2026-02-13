@@ -11,6 +11,6 @@
     "href": "index.html",
     "title": "Health Dashboard",
     "section": "",
-    "text": "Helpful census statistics that relate to healthcare planning for aging populations.\n\n  \n  \n    📍 County Lookup\n    \n      \n      \n        Get Data\n      \n    \n    \n      Find your county's FIPS code \n      \n        here"
+    "text": "Each county has a corresponding geogrphic id called a FIPS code. This code is used to organize various forms of data, especially those from the U.S. census or other data sources. By using the following lookup, one enter the FIPS code corresponding to one’s geographic location to get a few health-related data points for one’s county. These numbers can help an individual get a better idea of current healthcare gaps in one’s community.\n\n  \n  \n    📍 County Lookup\n    \n      \n      \n        Get Data\n      \n    \n    \n      Find your county's FIPS code \n      \n        here"
   }
 ]
